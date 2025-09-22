@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trình phát Bài giảng</title>
+    
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 0; background-color: #000; overflow: hidden; }
+        .player-container { background-color: #ffffff; width: 100vw; height: 100vh; padding: 10px; box-sizing: border-box; display: flex; flex-direction: column; }
+        .slide-viewer { border: 1px solid #ddd; border-radius: 8px; overflow-y: auto; margin-bottom: 10px; flex-grow: 1; position: relative; }
+        .slide-viewer img { width: 100%; height: auto; display: block; }
+        .slide-viewer.fit-mode { overflow: hidden; }
+        .slide-viewer.fit-mode img { width: 100%; height: 100%; object-fit: contain; }
+        .timeline-container { width: 100%; padding: 5px 0; margin-bottom: 5px; }
+        .progress-bar-wrapper { background-color: #e0e0e0; border-radius: 5px; cursor: pointer; padding: 4px 0; }
+        .progress-bar { background-color: #007bff; width: 0%; height: 8px; border-radius: 5px; }
+        .time-display { display: flex; justify-content: space-between; font-size: 12px; color: #666; margin-top: 5px; }
+        .controls { display: flex; justify-content: space-around; align-items: center; gap: 5px; flex-shrink: 0; }
+        
+        /* [CẬP NHẬT] Style cho các nút dạng icon */
+        .controls button {
+            color: white; border: none; border-radius: 50%; /* Bo tròn nút */
+            width: 44px; height: 44px; /* Kích thước chuẩn cho mobile */
+            font-size: 20px; /* Kích thước icon */
+            cursor: pointer; transition: background-color 0.3s;
+            display: flex; align-items: center; justify-content: center;
+            padding: 0;
+        }
+        
+        #prev-btn, #next-btn { background-color: #007bff; }
+        #play-pause-btn { background-color: #28a745; width: 50px; height: 50px; font-size: 24px; }
+        #play-pause-btn.playing { background-color: #dc3545; }
+        #scale-btn { background-color: #17a2b8; }
+        #autoscroll-btn { background-color: #6c757d; }
+        #autoscroll-btn.active { background-color: #fd7e14; }
+        #fullscreen-btn { background-color: #6c757d; }
+        .slide-counter { flex-grow: 1; text-align: center; font-size: 16px; color: #333; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="player-container">
+        <div id="slide-viewer" class="slide-viewer">
+            <img id="slide-image" src="" alt="Nội dung slide">
+        </div>
+        <div class="timeline-container">
+            <div id="progress-bar-wrapper" class="progress-bar-wrapper">
+                <div id="progress-bar" class="progress-bar"></div>
+            </div>
+            <div class="time-display">
+                <span id="current-time">00:00</span>
+                <span id="total-duration">00:00</span>
+            </div>
+        </div>
+        <div class="controls">
+            <button id="prev-btn" title="Slide trước">⏪</button>
+            <button id="play-pause-btn" title="Phát/Dừng">▶️</button>
+            <div id="slide-counter" class="slide-counter"></div>
+            <button id="next-btn" title="Slide tiếp theo">⏩</button>
+            <button id="autoscroll-btn" title="Bật/Tắt Tự cuộn">🔄</button>
+            <button id="scale-btn" title="Chế độ xem">⛶</button>
+            <button id="fullscreen-btn" title="Toàn màn hình">🖼️</button>
+        </div>
+        <audio id="slide-audio" src=""></audio>
+    </div>
+
+    <script>
+        // --- PHẦN CẤU HÌNH ---
+        const TOTAL_SLIDES = 39;
+        const IMAGE_BASENAME = 'slide-';
+        const IMAGE_EXTENSION = '.png';
+
+        // --- PHẦN LOGIC ---
+        const slideViewer=document.getElementById("slide-viewer"),slideImage=document.getElementById("slide-image"),slideAudio=document.getElementById("slide-audio"),autoscrollBtn=document.getElementById("autoscroll-btn"),playPauseBtn=document.getElementById("play-pause-btn"),prevBtn=document.getElementById("prev-btn"),nextBtn=document.getElementById("next-btn"),slideCounter=document.getElementById("slide-counter"),scaleBtn=document.getElementById("scale-btn"),fullscreenBtn=document.getElementById("fullscreen-btn"),progressBarWrapper=document.getElementById("progress-bar-wrapper"),progressBar=document.getElementById("progress-bar"),currentTimeEl=document.getElementById("current-time"),totalDurationEl=document.getElementById("total-duration");
+        let isFitMode=!1,scrollAnimationId=null,currentSlideIndex=0,isAutoscrollEnabled=!1;
+        
+        function showSlide(e){cancelAnimationFrame(scrollAnimationId);const t=slides[e];slideImage.src=t.image,slideAudio.src=t.audio,slideCounter.textContent=`${e+1} / ${TOTAL_SLIDES}`,slideViewer.scrollTop=0,prevBtn.disabled=0===e;const l=slideAudio.play();void 0!==l&&l.catch(e=>console.log("Autoplay bị chặn."))}
+        function autoScroll(){if(!isAutoscrollEnabled||isFitMode||slideAudio.paused||slideAudio.ended)return;const e=slideAudio.duration,t=slideAudio.currentTime,l=slideViewer.scrollHeight-slideViewer.clientHeight,n=(t/e)*l;slideViewer.scrollTop=n,scrollAnimationId=requestAnimationFrame(autoScroll)}
+        
+        // [CẬP NHẬT] Logic nút Tự cuộn chỉ đổi màu, không đổi text
+        autoscrollBtn.addEventListener("click",()=>{isAutoscrollEnabled=!isAutoscrollEnabled,autoscrollBtn.classList.toggle("active",isAutoscrollEnabled),isAutoscrollEnabled&&!slideAudio.paused?requestAnimationFrame(autoScroll):cancelAnimationFrame(scrollAnimationId)});
+        
+        // [CẬP NHẬT] Logic nút Scale giờ đổi icon
+        scaleBtn.addEventListener("click",()=>{isFitMode=!isFitMode,slideViewer.classList.toggle("fit-mode",isFitMode),scaleBtn.innerHTML=isFitMode?"↕️":"⛶",isFitMode?cancelAnimationFrame(scrollAnimationId):requestAnimationFrame(autoScroll)});
+
+        // [CẬP NHẬT LỚN] Hàm Fullscreen giờ có thể xoay ngang màn hình trên di động
+        function toggleFullscreen() {
+            const isMobile = window.matchMedia("(max-width: 768px)").matches;
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    alert(`Không thể bật chế độ toàn màn hình: ${err.message}`);
+                });
+                // Nếu là mobile, yêu cầu xoay ngang
+                if (isMobile && screen.orientation && typeof screen.orientation.lock === 'function') {
+                    screen.orientation.lock('landscape').catch(err => {
+                        console.log("Không thể tự động xoay màn hình.");
+                    });
+                }
+            } else {
+                // Nếu đang fullscreen, thoát ra
+                document.exitFullscreen();
+                // Mở khóa xoay màn hình
+                if (isMobile && screen.orientation && typeof screen.orientation.unlock === 'function') {
+                    screen.orientation.unlock();
+                }
+            }
+        }
+        
+        fullscreenBtn.addEventListener("click", toggleFullscreen);
+        document.addEventListener("fullscreenchange",()=>{
+            const icon = document.fullscreenElement ? 'X' : '🖼️';
+            fullscreenBtn.innerHTML = icon; // Cập nhật icon
+        });
+
+        // Cập nhật icon cho nút Play/Pause
+        slideAudio.addEventListener("play",()=>{playPauseBtn.innerHTML="⏸️"});
+        slideAudio.addEventListener("pause",()=>{playPauseBtn.innerHTML="▶️"});
+        
+        // Các hàm và sự kiện khác giữ nguyên (đã được thu gọn)
+        function formatTime(e){const t=Math.floor(e/60),l=Math.floor(e%60);return`${t.toString().padStart(2,"0")}:${l.toString().padStart(2,"0")}`}
+        slideAudio.addEventListener("timeupdate",()=>{if(slideAudio.duration){progressBar.style.width=`${slideAudio.currentTime/slideAudio.duration*100}%`;currentTimeEl.textContent=formatTime(slideAudio.currentTime)}});
+        slideAudio.addEventListener("loadedmetadata",()=>{totalDurationEl.textContent=formatTime(slideAudio.duration)});
+        progressBarWrapper.addEventListener("click",e=>{const t=slideAudio.duration;slideAudio.currentTime=e.offsetX/progressBarWrapper.clientWidth*t});
+        slideAudio.addEventListener("ended",()=>{if(currentSlideIndex<slides.length-1){nextBtn.click()}});
+        playPauseBtn.addEventListener("click",()=>{if(slideAudio.paused){slideAudio.play()}else{slideAudio.pause()}});
+        prevBtn.addEventListener("click",()=>{if(currentSlideIndex>0){currentSlideIndex--,showSlide(currentSlideIndex)}});
+        nextBtn.addEventListener("click",()=>{if(currentSlideIndex<slides.length-1){currentSlideIndex++,showSlide(currentSlideIndex)}});
+        const slides=[];for(let i=1;i<=TOTAL_SLIDES;i++){slides.push({image:`images/slide-${i}.png`,audio:`audio/slide_${i}.mp3`})}
+        window.onload=()=>{showSlide(currentSlideIndex)};
+    </script>
+</body>
+</html>
